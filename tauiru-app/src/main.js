@@ -73,32 +73,57 @@ function renderActiveTask() {
 
 async function renderRecentTasks() {
   try {
-    const recent = await invoke("get_recent_tasks");
-    const weeklyTotals = await invoke("get_weekly_totals");
+    const dailyTasks = await invoke("get_daily_tasks");
     recentList.innerHTML = "";
-    for (const name of recent) {
-      const item = document.createElement("div");
-      item.className = "recent-item";
 
-      const nameSpan = document.createElement("span");
-      nameSpan.className = "name";
-      nameSpan.textContent = name;
-      nameSpan.title = name;
+    // Group by date
+    const grouped = {};
+    for (const item of dailyTasks) {
+      if (!grouped[item.date]) grouped[item.date] = [];
+      grouped[item.date].push(item);
+    }
 
-      const totalSpan = document.createElement("span");
-      totalSpan.className = "weekly-total";
-      const total = weeklyTotals.find((t) => t.task === name);
-      totalSpan.textContent = total ? formatSeconds(total.seconds) : "0:00";
+    const today = new Date().toISOString().split("T")[0];
+    const yesterday = new Date(Date.now() - 86400000).toISOString().split("T")[0];
 
-      const btn = document.createElement("button");
-      btn.className = "start-btn";
-      btn.textContent = "▶";
-      btn.addEventListener("click", () => startTask(name));
+    for (const date of Object.keys(grouped)) {
+      // Day header
+      const header = document.createElement("div");
+      header.className = "day-header";
+      let label = date;
+      if (date === today) label = "Today";
+      else if (date === yesterday) label = "Yesterday";
+      else {
+        const d = new Date(date + "T00:00:00");
+        label = d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+      }
+      header.textContent = label;
+      recentList.appendChild(header);
 
-      item.appendChild(nameSpan);
-      item.appendChild(totalSpan);
-      item.appendChild(btn);
-      recentList.appendChild(item);
+      // Tasks for this day
+      for (const task of grouped[date]) {
+        const item = document.createElement("div");
+        item.className = "recent-item";
+
+        const nameSpan = document.createElement("span");
+        nameSpan.className = "name";
+        nameSpan.textContent = task.task;
+        nameSpan.title = task.task;
+
+        const totalSpan = document.createElement("span");
+        totalSpan.className = "weekly-total";
+        totalSpan.textContent = formatSeconds(task.seconds);
+
+        const btn = document.createElement("button");
+        btn.className = "start-btn";
+        btn.textContent = "▶";
+        btn.addEventListener("click", () => startTask(task.task));
+
+        item.appendChild(nameSpan);
+        item.appendChild(totalSpan);
+        item.appendChild(btn);
+        recentList.appendChild(item);
+      }
     }
   } catch (e) {
     console.error("Failed to load recent tasks:", e);

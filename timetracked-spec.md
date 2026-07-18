@@ -45,10 +45,13 @@ TimeTracked is a minimal personal time tracking desktop application built with T
 
 3. **Recent Tasks List**
    - Header: "Recent" label
-   - Shows up to 10 most recently tracked tasks (unique by name, most recent first)
+   - Shows tasks from the last 7 days, grouped by day (most recent day first)
+   - Each day has a header label: "Today", "Yesterday", or weekday + date (e.g., "Wed, Jul 16")
+   - Within each day, tasks are sorted by time spent descending
+   - The same task appearing on multiple days shows as a separate entry under each day
    - Each entry displays:
      - Task name (truncated with ellipsis if too long)
-     - Weekly total time spent on that task this calendar week (e.g., "2h15m" or "45m")
+     - Daily total time spent on that task for that specific day (e.g., "2h15m" or "45m")
      - Play button (▶) to restart tracking that task
    - Scrollable — grows with window height when resized
    - Clicking ▶ on a recent task creates a new time entry
@@ -160,12 +163,13 @@ A task stops in one of four ways:
 - The stop time recorded is exactly the cutoff time (e.g., 17:00:00)
 - Cutoff time is configurable via Preferences
 
-### Weekly Time Totals
+### Daily Time Totals (Recent List)
 
-- For each task in the recent list, the total time spent this calendar week is displayed
-- Week starts on Monday (ISO week)
-- Includes time from the currently active task (calculated in real-time via SQL)
+- The recent list shows the last 7 days of tracked data, grouped by day
+- For each task on each day, the total time spent that day is displayed
+- Includes time from the currently active task (calculated in real-time via SQL using current timestamp)
 - Format: "Xh YYm" for hours+minutes, or "Ym" for less than an hour
+- Days are ordered most recent first; tasks within a day are ordered by most time spent
 
 ### App Startup Behavior
 
@@ -299,6 +303,7 @@ task,start,end
 | `get_recent_tasks` | — | `string[]` | Last 10 unique task names |
 | `search_tasks` | `query: string` | `string[]` | Up to 10 matching task names for autocomplete |
 | `get_weekly_totals` | — | `WeeklyTotal[]` | Total seconds per task for current calendar week |
+| `get_daily_tasks` | — | `DailyTask[]` | Last 7 days of tasks grouped by day+task with daily totals |
 | `check_auto_stop` | — | `Entry \| null` | Auto-stop task if started before cutoff |
 | `get_settings` | — | `AppSettings` | Current app settings |
 | `save_settings` | `settings: AppSettings` | — | Persist settings |
@@ -317,6 +322,12 @@ interface Entry {
 }
 
 interface WeeklyTotal {
+  task: string;
+  seconds: number;
+}
+
+interface DailyTask {
+  date: string;    // "YYYY-MM-DD"
   task: string;
   seconds: number;
 }
@@ -356,7 +367,6 @@ interface WindowPosition {
 
 ## Future Enhancements (Out of Scope for v1)
 
-- Daily/weekly summary view within the app
 - Keyboard shortcut to focus the window (global hotkey)
 - Tags/categories for tasks
 - Dark/light theme toggle

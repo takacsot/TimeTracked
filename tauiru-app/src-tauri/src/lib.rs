@@ -29,6 +29,13 @@ pub struct WeeklyTotal {
     pub seconds: i64,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct DailyTask {
+    pub date: String,  // YYYY-MM-DD
+    pub task: String,
+    pub seconds: i64,
+}
+
 pub struct AppState {
     db: Connection,
 }
@@ -291,6 +298,49 @@ fn get_weekly_totals(state: State<Mutex<AppState>>) -> Result<Vec<WeeklyTotal>, 
         .collect();
 
     Ok(totals)
+}
+
+#[tauri::command]
+fn get_daily_tasks(state: State<Mutex<AppState>>) -> Result<Vec<DailyTask>, String> {
+    let state = state.lock().map_err(|e| e.to_string())?;
+    let now = Local::now().naive_local();
+    let week_ago = (now.date() - chrono::Duration::days(6))
+        .and_hms_opt(0, 0, 0)
+        .unwrap()
+        .format("%Y-%m-%dT%H:%M:%S")
+        .to_string();
+    let now_str = now.format("%Y-%m-%dT%H:%M:%S").to_string();
+
+    let mut stmt = state
+        .db
+        .prepare(
+            "SELECT date(start) as day, task,
+                SUM(
+                    CAST(
+                        (julianday(CASE WHEN end_time = '' THEN ?1 ELSE end_time END)
+                         - julianday(start)) * 86400
+                    AS INTEGER)
+                ) as total_seconds
+            FROM entries
+            WHERE start >= ?2
+            GROUP BY day, task
+            ORDER BY day DESC, total_seconds DESC",
+        )
+        .map_err(|e| e.to_string())?;
+
+    let tasks: Vec<DailyTask> = stmt
+        .query_map(params![&now_str, &week_ago], |row| {
+            Ok(DailyTask {
+                date: row.get(0)?,
+                task: row.get(1)?,
+                seconds: row.get(2)?,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .filter_map(|r| r.ok())
+        .collect();
+
+    Ok(tasks)
 }
 
 #[tauri::command]
@@ -801,6 +851,7 @@ pub fn run() {
             get_recent_tasks,
             search_tasks,
             get_weekly_totals,
+            get_daily_tasks,
             check_auto_stop,
             save_current_window_position,
             restore_window_position,
