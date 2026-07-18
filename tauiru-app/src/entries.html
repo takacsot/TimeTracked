@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Edit Entries</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 12px;
+      background: #1a1a2e;
+      color: #eee;
+      padding: 12px;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .toolbar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+      flex-shrink: 0;
+    }
+
+    .toolbar .info {
+      font-size: 11px;
+      color: #666;
+    }
+
+    .toolbar button {
+      padding: 4px 10px;
+      border: none;
+      border-radius: 3px;
+      font-size: 11px;
+      cursor: pointer;
+      background: #0f3460;
+      color: #eee;
+    }
+
+    .toolbar button:hover {
+      background: #1a5276;
+    }
+
+    .entries-table {
+      flex: 1;
+      overflow-y: auto;
+      border: 1px solid #333;
+      border-radius: 4px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 11px;
+    }
+
+    thead {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+    }
+
+    th {
+      background: #0f3460;
+      color: #ccc;
+      padding: 6px 8px;
+      text-align: left;
+      font-weight: 500;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+
+    td {
+      padding: 5px 8px;
+      border-bottom: 1px solid #262640;
+      vertical-align: middle;
+    }
+
+    tr:hover {
+      background: #1e2a4a;
+    }
+
+    tr.editing {
+      background: #1e2a4a;
+    }
+
+    td input {
+      width: 100%;
+      padding: 3px 6px;
+      border: 1px solid #444;
+      border-radius: 3px;
+      background: #16213e;
+      color: #eee;
+      font-size: 11px;
+      font-family: inherit;
+      outline: none;
+    }
+
+    td input:focus {
+      border-color: #0f3460;
+    }
+
+    td input.error {
+      border-color: #e94560;
+    }
+
+    .actions {
+      display: flex;
+      gap: 4px;
+      white-space: nowrap;
+    }
+
+    .btn-icon {
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 13px;
+      padding: 2px 5px;
+      border-radius: 3px;
+      line-height: 1;
+    }
+
+    .btn-edit {
+      color: #888;
+    }
+
+    .btn-edit:hover {
+      color: #eee;
+      background: #333;
+    }
+
+    .btn-delete {
+      color: #888;
+    }
+
+    .btn-delete:hover {
+      color: #e94560;
+      background: #331020;
+    }
+
+    .btn-save {
+      color: #4caf50;
+    }
+
+    .btn-save:hover {
+      background: #1a3320;
+    }
+
+    .btn-cancel {
+      color: #aaa;
+    }
+
+    .btn-cancel:hover {
+      background: #333;
+    }
+
+    .running-badge {
+      font-size: 10px;
+      color: #e94560;
+      font-style: italic;
+    }
+
+    .confirm-delete {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 10px;
+      color: #e94560;
+    }
+
+    .confirm-delete button {
+      padding: 2px 8px;
+      border: none;
+      border-radius: 3px;
+      font-size: 10px;
+      cursor: pointer;
+    }
+
+    .confirm-delete .btn-confirm-yes {
+      background: #e94560;
+      color: white;
+    }
+
+    .confirm-delete .btn-confirm-no {
+      background: #333;
+      color: #ccc;
+    }
+
+    .status-msg {
+      font-size: 11px;
+      margin-top: 6px;
+      min-height: 16px;
+      flex-shrink: 0;
+    }
+
+    .status-msg.success {
+      color: #4caf50;
+    }
+
+    .status-msg.error {
+      color: #e94560;
+    }
+
+    .load-more {
+      text-align: center;
+      padding: 8px;
+    }
+
+    .load-more button {
+      padding: 4px 12px;
+      border: none;
+      border-radius: 3px;
+      font-size: 11px;
+      cursor: pointer;
+      background: #16213e;
+      color: #aaa;
+      border: 1px solid #333;
+    }
+
+    .load-more button:hover {
+      background: #1e2a4a;
+      color: #eee;
+    }
+  </style>
+</head>
+<body>
+  <div class="toolbar">
+    <span class="info" id="entry-count"></span>
+  </div>
+
+  <div class="entries-table">
+    <table>
+      <thead>
+        <tr>
+          <th>Task</th>
+          <th>Start</th>
+          <th>End</th>
+          <th style="width:70px"></th>
+        </tr>
+      </thead>
+      <tbody id="entries-body"></tbody>
+    </table>
+    <div class="load-more" id="load-more" style="display:none;">
+      <button id="load-more-btn">Load more...</button>
+    </div>
+  </div>
+
+  <div class="status-msg" id="status-msg"></div>
+
+  <script type="module">
+    const { invoke } = window.__TAURI__.core;
+
+    const entriesBody = document.getElementById("entries-body");
+    const entryCount = document.getElementById("entry-count");
+    const loadMoreEl = document.getElementById("load-more");
+    const loadMoreBtn = document.getElementById("load-more-btn");
+    const statusMsg = document.getElementById("status-msg");
+
+    const PAGE_SIZE = 50;
+    let entries = [];
+    let offset = 0;
+    let editingId = null;
+
+    function formatDateTime(iso) {
+      if (!iso) return "";
+      // Show as "YYYY-MM-DD HH:MM:SS"
+      return iso.replace("T", " ");
+    }
+
+    function showStatus(msg, type) {
+      statusMsg.textContent = msg;
+      statusMsg.className = "status-msg " + type;
+      if (type === "success") {
+        setTimeout(() => { statusMsg.textContent = ""; }, 2000);
+      }
+    }
+
+    function renderEntries() {
+      entriesBody.innerHTML = "";
+      for (const entry of entries) {
+        const tr = document.createElement("tr");
+        tr.dataset.id = entry.id;
+
+        if (editingId === entry.id) {
+          tr.className = "editing";
+          tr.innerHTML = `
+            <td><input type="text" class="edit-task" value="${escapeHtml(entry.task)}" /></td>
+            <td><input type="text" class="edit-start" value="${entry.start}" placeholder="YYYY-MM-DDTHH:MM:SS" /></td>
+            <td><input type="text" class="edit-end" value="${entry.end}" placeholder="${entry.end === '' ? 'running' : 'YYYY-MM-DDTHH:MM:SS'}" /></td>
+            <td class="actions">
+              <button class="btn-icon btn-save" title="Save">✓</button>
+              <button class="btn-icon btn-cancel" title="Cancel">✕</button>
+            </td>
+          `;
+          tr.querySelector(".btn-save").addEventListener("click", () => saveEntry(entry.id, tr));
+          tr.querySelector(".btn-cancel").addEventListener("click", () => cancelEdit());
+          // Enter to save
+          tr.querySelectorAll("input").forEach(input => {
+            input.addEventListener("keydown", (e) => {
+              if (e.key === "Enter") saveEntry(entry.id, tr);
+              if (e.key === "Escape") cancelEdit();
+            });
+          });
+        } else {
+          const endDisplay = entry.end === ""
+            ? '<span class="running-badge">running</span>'
+            : formatDateTime(entry.end);
+          tr.innerHTML = `
+            <td>${escapeHtml(entry.task)}</td>
+            <td>${formatDateTime(entry.start)}</td>
+            <td>${endDisplay}</td>
+            <td class="actions">
+              <button class="btn-icon btn-edit" title="Edit">✎</button>
+              <button class="btn-icon btn-delete" title="Delete">🗑</button>
+            </td>
+          `;
+          tr.querySelector(".btn-edit").addEventListener("click", () => startEdit(entry.id));
+          tr.querySelector(".btn-delete").addEventListener("click", () => confirmDelete(entry.id, tr));
+        }
+
+        entriesBody.appendChild(tr);
+      }
+      entryCount.textContent = `${entries.length} entries loaded`;
+    }
+
+    function escapeHtml(str) {
+      return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    }
+
+    function startEdit(id) {
+      editingId = id;
+      renderEntries();
+      // Focus the task input
+      const row = entriesBody.querySelector(`tr[data-id="${id}"]`);
+      if (row) row.querySelector(".edit-task").focus();
+    }
+
+    function cancelEdit() {
+      editingId = null;
+      renderEntries();
+    }
+
+    async function saveEntry(id, tr) {
+      const task = tr.querySelector(".edit-task").value;
+      const start = tr.querySelector(".edit-start").value;
+      const endTime = tr.querySelector(".edit-end").value;
+
+      try {
+        const updated = await invoke("update_entry", { id, task, start, endTime });
+        // Update local data
+        const idx = entries.findIndex(e => e.id === id);
+        if (idx >= 0) entries[idx] = updated;
+        editingId = null;
+        renderEntries();
+        showStatus("✓ Entry updated", "success");
+      } catch (e) {
+        showStatus("Error: " + e, "error");
+        // Highlight problematic fields
+        if (e.includes("Task")) tr.querySelector(".edit-task").classList.add("error");
+        if (e.includes("Start") || e.includes("after")) tr.querySelector(".edit-start").classList.add("error");
+        if (e.includes("End") || e.includes("after")) tr.querySelector(".edit-end").classList.add("error");
+      }
+    }
+
+    function confirmDelete(id, tr) {
+      const actionsCell = tr.querySelector(".actions");
+      actionsCell.innerHTML = `
+        <span class="confirm-delete">
+          Delete?
+          <button class="btn-confirm-yes">Yes</button>
+          <button class="btn-confirm-no">No</button>
+        </span>
+      `;
+      actionsCell.querySelector(".btn-confirm-yes").addEventListener("click", () => doDelete(id));
+      actionsCell.querySelector(".btn-confirm-no").addEventListener("click", () => renderEntries());
+    }
+
+    async function doDelete(id) {
+      try {
+        await invoke("delete_entry", { id });
+        entries = entries.filter(e => e.id !== id);
+        renderEntries();
+        showStatus("✓ Entry deleted", "success");
+      } catch (e) {
+        showStatus("Error: " + e, "error");
+      }
+    }
+
+    async function loadEntries(append) {
+      try {
+        const page = await invoke("get_entries_page", { offset, limit: PAGE_SIZE });
+        if (append) {
+          entries = entries.concat(page);
+        } else {
+          entries = page;
+        }
+        renderEntries();
+        loadMoreEl.style.display = page.length === PAGE_SIZE ? "block" : "none";
+      } catch (e) {
+        showStatus("Failed to load entries: " + e, "error");
+      }
+    }
+
+    loadMoreBtn.addEventListener("click", () => {
+      offset += PAGE_SIZE;
+      loadEntries(true);
+    });
+
+    // Initial load
+    loadEntries(false);
+  </script>
+</body>
+</html>

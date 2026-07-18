@@ -36,6 +36,14 @@ pub struct DailyTask {
     pub seconds: i64,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct EntryWithId {
+    pub id: i64,
+    pub task: String,
+    pub start: String,
+    pub end: String,
+}
+
 pub struct AppState {
     db: Connection,
 }
@@ -502,6 +510,80 @@ fn export_csv(path: String, state: State<Mutex<AppState>>) -> Result<(), String>
     Ok(())
 }
 
+// --- Entry Editor Commands ---
+
+#[tauri::command]
+fn get_entries_page(offset: i64, limit: i64, state: State<Mutex<AppState>>) -> Result<Vec<EntryWithId>, String> {
+    let state = state.lock().map_err(|e| e.to_string())?;
+
+    let mut stmt = state
+        .db
+        .prepare(
+            "SELECT id, task, start, end_time FROM entries ORDER BY id DESC LIMIT ?1 OFFSET ?2",
+        )
+        .map_err(|e| e.to_string())?;
+
+    let entries: Vec<EntryWithId> = stmt
+        .query_map(params![limit, offset], |row| {
+            Ok(EntryWithId {
+                id: row.get(0)?,
+                task: row.get(1)?,
+                start: row.get(2)?,
+                end: row.get(3)?,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .filter_map(|r| r.ok())
+        .collect();
+
+    Ok(entries)
+}
+
+#[tauri::command]
+fn update_entry(id: i64, task: String, start: String, end_time: String, state: State<Mutex<AppState>>) -> Result<EntryWithId, String> {
+    let task = task.trim().to_string();
+    if task.is_empty() {
+        return Err("Task name cannot be empty".to_string());
+    }
+    if start.is_empty() {
+        return Err("Start time cannot be empty".to_string());
+    }
+    // If end_time is non-empty, validate start < end
+    if !end_time.is_empty() && end_time <= start {
+        return Err("End time must be after start time".to_string());
+    }
+
+    let state = state.lock().map_err(|e| e.to_string())?;
+    let affected = state
+        .db
+        .execute(
+            "UPDATE entries SET task = ?1, start = ?2, end_time = ?3 WHERE id = ?4",
+            params![&task, &start, &end_time, id],
+        )
+        .map_err(|e| e.to_string())?;
+
+    if affected == 0 {
+        return Err("Entry not found".to_string());
+    }
+
+    Ok(EntryWithId { id, task, start, end: end_time })
+}
+
+#[tauri::command]
+fn delete_entry(id: i64, state: State<Mutex<AppState>>) -> Result<(), String> {
+    let state = state.lock().map_err(|e| e.to_string())?;
+    let affected = state
+        .db
+        .execute("DELETE FROM entries WHERE id = ?1", params![id])
+        .map_err(|e| e.to_string())?;
+
+    if affected == 0 {
+        return Err("Entry not found".to_string());
+    }
+
+    Ok(())
+}
+
 // --- Window Position Commands ---
 
 #[derive(Debug, Clone, Serialize)]
@@ -637,6 +719,10 @@ fn build_tray_menu(app: &tauri::AppHandle) -> tauri::Result<tauri::menu::Menu<ta
         .build(app)?;
     builder = builder.item(&prefs);
 
+    let entries = MenuItemBuilder::with_id("tray_edit_entries", "Edit Entries...")
+        .build(app)?;
+    builder = builder.item(&entries);
+
     let show = MenuItemBuilder::with_id("tray_show", "Show Window")
         .build(app)?;
     builder = builder.item(&show);
@@ -675,12 +761,16 @@ pub fn run() {
             let preferences = MenuItemBuilder::with_id("preferences", "Preferences...")
                 .accelerator("CmdOrCtrl+,")
                 .build(app)?;
+            let edit_entries = MenuItemBuilder::with_id("edit_entries", "Edit Entries...")
+                .accelerator("CmdOrCtrl+Shift+E")
+                .build(app)?;
             let export = MenuItemBuilder::with_id("export_csv", "Export CSV...")
                 .accelerator("CmdOrCtrl+E")
                 .build(app)?;
 
             let file_menu = SubmenuBuilder::new(app, "File")
                 .item(&preferences)
+                .item(&edit_entries)
                 .item(&export)
                 .separator()
                 .quit()
@@ -743,6 +833,23 @@ pub fn run() {
                             .title("Preferences")
                             .inner_size(400.0, 250.0)
                             .resizable(false)
+                            .build();
+                        }
+                        "tray_edit_entries" => {
+                            let existing = app_handle.get_webview_window("entries");
+                            if let Some(win) = existing {
+                                let _ = win.set_focus();
+                                return;
+                            }
+                            let _ = tauri::WebviewWindowBuilder::new(
+                                app_handle,
+                                "entries",
+                                tauri::WebviewUrl::App("entries.html".into()),
+                            )
+                            .title("Edit Entries")
+                            .inner_size(600.0, 500.0)
+                            .resizable(true)
+                            .min_inner_size(500.0, 300.0)
                             .build();
                         }
                         "tray_show" => {
@@ -832,6 +939,24 @@ pub fn run() {
                         .build()
                         .expect("Failed to create preferences window");
                     }
+                    "edit_entries" => {
+                        // Open entries editor window
+                        let existing = app_handle.get_webview_window("entries");
+                        if let Some(win) = existing {
+                            let _ = win.set_focus();
+                            return;
+                        }
+                        let _ = tauri::WebviewWindowBuilder::new(
+                            app_handle,
+                            "entries",
+                            tauri::WebviewUrl::App("entries.html".into()),
+                        )
+                        .title("Edit Entries")
+                        .inner_size(600.0, 500.0)
+                        .resizable(true)
+                        .min_inner_size(500.0, 300.0)
+                        .build();
+                    }
                     "export_csv" => {
                         // Trigger CSV export via the main window
                         if let Some(win) = app_handle.get_webview_window("main") {
@@ -853,6 +978,9 @@ pub fn run() {
             get_weekly_totals,
             get_daily_tasks,
             check_auto_stop,
+            get_entries_page,
+            update_entry,
+            delete_entry,
             save_current_window_position,
             restore_window_position,
             get_settings,

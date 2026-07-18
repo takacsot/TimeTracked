@@ -71,6 +71,7 @@ TimeTracked is a minimal personal time tracking desktop application built with T
 | No task running | No task active | Disabled, informational |
 | ▶ {recent task} | Always (up to 5) | Starts tracking that task |
 | Preferences... | Always | Opens preferences window |
+| Edit Entries... | Always | Opens entry editor window |
 | Show Window | Always | Shows and focuses main window |
 | Quit | Always | Exits the application |
 
@@ -104,11 +105,41 @@ TimeTracked is a minimal personal time tracking desktop application built with T
    - Default filename: `timetracked-YYYY-MM-DD.csv`
    - Filter: CSV files (*.csv)
 
+### Entry Editor Window
+
+- Opened via `File > Edit Entries...`, `Cmd+Shift+E`, or tray menu "Edit Entries..."
+- Separate window (600×500px, resizable, min 500×300px)
+- If already open, focuses the existing window instead of creating a new one
+
+#### Layout
+
+- Table view showing all entries, newest first
+- Columns: Task, Start, End, Actions
+- Entries with empty end_time show "running" badge in red italic
+- Pagination: loads 50 entries at a time, "Load more..." button appends next page
+
+#### Editing
+
+- Click ✎ (edit) button to enter inline edit mode for that row
+- Task name, start time, and end time become editable text inputs
+- Save (✓) or Cancel (✕) buttons appear
+- Enter key saves, Escape cancels
+- Validation: task cannot be empty, start cannot be empty, end must be after start
+- Error fields highlighted in red on validation failure
+- Status message "✓ Entry updated" shown on success
+
+#### Deleting
+
+- Click 🗑 (delete) button shows inline confirmation "Delete? Yes / No"
+- Confirming removes the entry permanently
+- Status message "✓ Entry deleted" shown on success
+
 ### Native Menu
 
 | Menu | Item | Shortcut | Action |
 |------|------|----------|--------|
 | File | Preferences... | `Cmd+,` | Opens preferences window |
+| File | Edit Entries... | `Cmd+Shift+E` | Opens entry editor window |
 | File | Export CSV... | `Cmd+E` | Opens save dialog, exports all entries |
 | File | Quit | `Cmd+Q` | Exits application |
 | Edit | Undo | `Cmd+Z` | Standard text editing |
@@ -305,6 +336,9 @@ task,start,end
 | `get_weekly_totals` | — | `WeeklyTotal[]` | Total seconds per task for current calendar week |
 | `get_daily_tasks` | — | `DailyTask[]` | Last 7 days of tasks grouped by day+task with daily totals |
 | `check_auto_stop` | — | `Entry \| null` | Auto-stop task if started before cutoff |
+| `get_entries_page` | `offset: number, limit: number` | `EntryWithId[]` | Paginated entries, newest first |
+| `update_entry` | `id: number, task: string, start: string, end_time: string` | `EntryWithId` | Update an existing entry |
+| `delete_entry` | `id: number` | `()` | Delete an entry by ID |
 | `get_settings` | — | `AppSettings` | Current app settings |
 | `save_settings` | `settings: AppSettings` | — | Persist settings |
 | `export_csv` | `path: string` | — | Write all entries to file at path |
@@ -316,6 +350,13 @@ task,start,end
 
 ```typescript
 interface Entry {
+  task: string;
+  start: string;  // "YYYY-MM-DDTHH:MM:SS"
+  end: string;    // "YYYY-MM-DDTHH:MM:SS" or ""
+}
+
+interface EntryWithId {
+  id: number;
   task: string;
   start: string;  // "YYYY-MM-DDTHH:MM:SS"
   end: string;    // "YYYY-MM-DDTHH:MM:SS" or ""
