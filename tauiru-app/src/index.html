@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>TimeTracked</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 12px;
+      background: #1a1a2e;
+      color: #eee;
+      padding: 8px;
+      height: 100vh;
+      overflow: hidden;
+      user-select: none;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Task Input */
+    .input-wrapper {
+      position: relative;
+    }
+
+    #task-input {
+      width: 100%;
+      padding: 8px 10px;
+      border: 1px solid #333;
+      border-radius: 4px;
+      background: #16213e;
+      color: #eee;
+      font-size: inherit;
+      outline: none;
+    }
+
+    #task-input:focus {
+      border-color: #0f3460;
+    }
+
+    #task-input::placeholder {
+      color: #666;
+    }
+
+    /* Autocomplete */
+    #autocomplete {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      background: #16213e;
+      border: 1px solid #333;
+      border-top: none;
+      border-radius: 0 0 4px 4px;
+      max-height: 100px;
+      overflow-y: auto;
+      z-index: 100;
+      display: none;
+    }
+
+    #autocomplete .suggestion {
+      padding: 6px 10px;
+      cursor: pointer;
+      font-size: 0.9em;
+    }
+
+    #autocomplete .suggestion:hover,
+    #autocomplete .suggestion.selected {
+      background: #0f3460;
+    }
+
+    /* Active Task */
+    .active-task {
+      margin-top: 8px;
+      padding: 8px;
+      background: #16213e;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 36px;
+    }
+
+    .active-task .task-name {
+      flex: 1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      font-size: 0.9em;
+      color: #ccc;
+    }
+
+    .active-task .timer {
+      font-family: "SF Mono", "Menlo", monospace;
+      font-size: inherit;
+      color: #e94560;
+      min-width: 55px;
+      text-align: right;
+    }
+
+    .active-task .stop-btn {
+      background: #e94560;
+      color: white;
+      border: none;
+      border-radius: 3px;
+      padding: 3px 8px;
+      font-size: 0.8em;
+      cursor: pointer;
+    }
+
+    .active-task .stop-btn:hover {
+      background: #c0392b;
+    }
+
+    .active-task.idle .task-name {
+      color: #666;
+      font-style: italic;
+    }
+
+    /* Recent Tasks */
+    .recent-header {
+      margin-top: 8px;
+      font-size: 0.8em;
+      color: #666;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .recent-list {
+      margin-top: 4px;
+      flex: 1;
+      overflow-y: auto;
+    }
+
+    .recent-item {
+      display: flex;
+      align-items: center;
+      padding: 4px 0;
+      gap: 6px;
+    }
+
+    .recent-item .name {
+      flex: 1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      font-size: 0.9em;
+      color: #aaa;
+    }
+
+    .recent-item .weekly-total {
+      font-family: "SF Mono", "Menlo", monospace;
+      font-size: 0.8em;
+      color: #666;
+      flex-shrink: 0;
+    }
+
+    .recent-item .start-btn {
+      background: #0f3460;
+      color: #eee;
+      border: none;
+      border-radius: 3px;
+      padding: 2px 8px;
+      font-size: 0.8em;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+
+    .recent-item .start-btn:hover {
+      background: #1a5276;
+    }
+  </style>
+</head>
+<body>
+  <div class="input-wrapper">
+    <input type="text" id="task-input" placeholder="What are you working on?" autocomplete="off" />
+    <div id="autocomplete"></div>
+  </div>
+
+  <div class="active-task idle" id="active-task">
+    <span class="task-name" id="active-name">No task running</span>
+    <span class="timer" id="timer"></span>
+    <button class="stop-btn" id="stop-btn" style="display:none;">Stop</button>
+  </div>
+
+  <div class="recent-header">Recent</div>
+  <div class="recent-list" id="recent-list"></div>
+
+  <script type="module" src="main.js"></script>
+</body>
+</html>
