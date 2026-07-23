@@ -46,7 +46,8 @@ TimeTracked is a minimal personal time tracking desktop application built with T
 3. **Recent Tasks List**
    - Header: "Recent" label
    - Shows tasks from the last 7 days, grouped by day (most recent day first)
-   - Each day has a header label: "Today", "Yesterday", or weekday + date (e.g., "Wed, Jul 16")
+   - Each day has a header label showing the formatted date (e.g., "Wed, Jul 23")
+   - Each day header displays the total time worked that day, right-aligned (e.g., "3h45m")
    - Within each day, tasks are sorted by time spent descending
    - The same task appearing on multiple days shows as a separate entry under each day
    - Each entry displays:
@@ -85,13 +86,14 @@ TimeTracked is a minimal personal time tracking desktop application built with T
 ### Preferences Window
 
 - Opened via `File > Preferences`, `Cmd+,`, or tray menu "Preferences..."
-- Separate window (400×250px, non-resizable)
+- Separate window (420×380px, resizable)
 - If already open, focuses the existing window instead of creating a new one
 
 #### Sections
 
 1. **Working Hours & Appearance**
-   - End of day time picker (HH:MM format), default: 17:00
+   - Auto-stop times: a dynamic list of HH:MM time pickers, with add (+) and remove (×) buttons
+   - Multiple auto-stop times can be configured (e.g., 12:00 for lunch, 17:00 for end of day, 20:00 for late work)
    - Font size number input (10–18px), default: 12
    - Always on top checkbox, default: checked
    - Save button persists all settings to database immediately
@@ -174,7 +176,7 @@ A task stops in one of four ways:
 
 1. **Manual stop** — user clicks the Stop button in the main window
 2. **Task switch** — user enters a new task name and presses Enter (stops current, starts new)
-3. **Automatic stop** — at the configured end-of-day time, only if the task was started before that time
+3. **Automatic stop** — at any configured auto-stop time, only if the task was started before that time
 4. **Tray stop** — user clicks "■ Stop" in the system tray menu
 
 ### Autocomplete
@@ -186,17 +188,21 @@ A task stops in one of four ways:
 - Keyboard navigation: Arrow Up/Down to cycle through suggestions
 - Source: distinct task names from database history, ordered by most recently used
 
-### Automatic Stop at End of Day
+### Automatic Stop at Configured Times
 
 - Checked every 30 seconds while the app is running
-- At the configured end-of-day time (default 17:00), the currently tracked task is automatically stopped **only if it was started before that time**
-- Tasks started after the cutoff time continue running normally (evening/overtime work is not interrupted)
+- Multiple auto-stop times can be configured (e.g., 12:00, 17:00, 20:00)
+- When the current time passes any configured auto-stop time, the currently tracked task is automatically stopped **only if it was started before that cutoff time**
+- The system checks all configured times and uses the latest one that has already passed
+- Tasks started after the most recent cutoff time continue running normally
 - The stop time recorded is exactly the cutoff time (e.g., 17:00:00)
-- Cutoff time is configurable via Preferences
+- Default: a single auto-stop time at 17:00
+- Configurable via Preferences
 
 ### Daily Time Totals (Recent List)
 
 - The recent list shows the last 7 days of tracked data, grouped by day
+- Each day header shows the aggregate total time worked that day, right-aligned in monospace
 - For each task on each day, the total time spent that day is displayed
 - Includes time from the currently active task (calculated in real-time via SQL using current timestamp)
 - Format: "Xh YYm" for hours+minutes, or "Ym" for less than an hour
@@ -260,7 +266,8 @@ CREATE TABLE settings (
 
 | Key | Format | Default | Description |
 |-----|--------|---------|-------------|
-| `end_of_day` | `HH:MM` | `17:00` | Auto-stop cutoff time |
+| `auto_stop_times` | `HH:MM,HH:MM,...` | `17:00` | Comma-separated list of auto-stop cutoff times |
+| `end_of_day` | `HH:MM` | `17:00` | Legacy key (migrated to auto_stop_times on read) |
 | `font_size` | integer string | `12` | UI base font size in pixels (10–18) |
 | `always_on_top` | `true`/`false` | `true` | Whether main window stays on top |
 | `window_position` | `x,y,width,height` | (none) | Last window position/size |
@@ -335,7 +342,7 @@ task,start,end
 | `search_tasks` | `query: string` | `string[]` | Up to 10 matching task names for autocomplete |
 | `get_weekly_totals` | — | `WeeklyTotal[]` | Total seconds per task for current calendar week |
 | `get_daily_tasks` | — | `DailyTask[]` | Last 7 days of tasks grouped by day+task with daily totals |
-| `check_auto_stop` | — | `Entry \| null` | Auto-stop task if started before cutoff |
+| `check_auto_stop` | — | `Entry \| null` | Auto-stop task if started before any passed cutoff time |
 | `get_entries_page` | `offset: number, limit: number` | `EntryWithId[]` | Paginated entries, newest first |
 | `update_entry` | `id: number, task: string, start: string, end_time: string` | `EntryWithId` | Update an existing entry |
 | `delete_entry` | `id: number` | `()` | Delete an entry by ID |
@@ -374,8 +381,8 @@ interface DailyTask {
 }
 
 interface AppSettings {
-  end_of_day: string;    // "HH:MM"
-  font_size: number;     // 10–18
+  auto_stop_times: string[];  // ["HH:MM", ...] e.g. ["12:00", "17:00", "20:00"]
+  font_size: number;          // 10–18
   always_on_top: boolean;
 }
 

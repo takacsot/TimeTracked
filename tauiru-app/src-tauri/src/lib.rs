@@ -18,8 +18,8 @@ pub struct Entry {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppSettings {
-    pub end_of_day: String, // HH:MM format
-    pub font_size: u32,     // px, 10–18
+    pub auto_stop_times: Vec<String>, // Vec of HH:MM strings
+    pub font_size: u32,               // px, 10–18
     pub always_on_top: bool,
 }
 
@@ -108,8 +108,29 @@ impl AppState {
         }
     }
 
-    fn get_end_of_day(&self) -> NaiveTime {
+    fn get_auto_stop_times(&self) -> Vec<NaiveTime> {
+        // Try new key first, fall back to legacy end_of_day
         let result: Option<String> = self
+            .db
+            .query_row(
+                "SELECT value FROM settings WHERE key = 'auto_stop_times'",
+                [],
+                |row| row.get(0),
+            )
+            .ok();
+
+        if let Some(times_str) = result {
+            let times: Vec<NaiveTime> = times_str
+                .split(',')
+                .filter_map(|s| NaiveTime::parse_from_str(s.trim(), "%H:%M").ok())
+                .collect();
+            if !times.is_empty() {
+                return times;
+            }
+        }
+
+        // Legacy fallback
+        let legacy: Option<String> = self
             .db
             .query_row(
                 "SELECT value FROM settings WHERE key = 'end_of_day'",
@@ -118,13 +139,13 @@ impl AppState {
             )
             .ok();
 
-        if let Some(time_str) = result {
+        if let Some(time_str) = legacy {
             if let Ok(t) = NaiveTime::parse_from_str(&time_str, "%H:%M") {
-                return t;
+                return vec![t];
             }
         }
-        // Default: 17:00
-        NaiveTime::from_hms_opt(17, 0, 0).unwrap()
+
+        vec![NaiveTime::from_hms_opt(17, 0, 0).unwrap()]
     }
 }
 
@@ -355,9 +376,12 @@ fn get_daily_tasks(state: State<Mutex<AppState>>) -> Result<Vec<DailyTask>, Stri
 fn check_auto_stop(state: State<Mutex<AppState>>) -> Result<Option<Entry>, String> {
     let now = Local::now();
     let state = state.lock().map_err(|e| e.to_string())?;
-    let cutoff = state.get_end_of_day();
+    let times = state.get_auto_stop_times();
 
-    if now.time() >= cutoff {
+    // Find the latest auto-stop time that has already passed today
+    let cutoff = times.iter().filter(|&&t| now.time() >= t).max().copied();
+
+    if let Some(cutoff) = cutoff {
         let today_cutoff = now
             .date_naive()
             .and_time(cutoff)
@@ -411,14 +435,29 @@ fn check_auto_stop(state: State<Mutex<AppState>>) -> Result<Option<Entry>, Strin
 #[tauri::command]
 fn get_settings(state: State<Mutex<AppState>>) -> Result<AppSettings, String> {
     let state = state.lock().map_err(|e| e.to_string())?;
-    let end_of_day: String = state
+
+    // Try new key first, fall back to legacy
+    let auto_stop_times: Vec<String> = state
         .db
         .query_row(
-            "SELECT value FROM settings WHERE key = 'end_of_day'",
+            "SELECT value FROM settings WHERE key = 'auto_stop_times'",
             [],
-            |row| row.get(0),
+            |row| row.get::<_, String>(0),
         )
-        .unwrap_or_else(|_| "17:00".to_string());
+        .ok()
+        .map(|s| s.split(',').map(|t| t.trim().to_string()).filter(|t| !t.is_empty()).collect())
+        .unwrap_or_else(|| {
+            // Legacy fallback
+            let legacy = state
+                .db
+                .query_row(
+                    "SELECT value FROM settings WHERE key = 'end_of_day'",
+                    [],
+                    |row| row.get::<_, String>(0),
+                )
+                .unwrap_or_else(|_| "17:00".to_string());
+            vec![legacy]
+        });
 
     let font_size: u32 = state
         .db
@@ -442,17 +481,18 @@ fn get_settings(state: State<Mutex<AppState>>) -> Result<AppSettings, String> {
         .map(|v| v == "true")
         .unwrap_or(true);
 
-    Ok(AppSettings { end_of_day, font_size, always_on_top })
+    Ok(AppSettings { auto_stop_times, font_size, always_on_top })
 }
 
 #[tauri::command]
 fn save_settings(settings: AppSettings, state: State<Mutex<AppState>>) -> Result<(), String> {
     let state = state.lock().map_err(|e| e.to_string())?;
+    let times_str = settings.auto_stop_times.join(",");
     state
         .db
         .execute(
-            "INSERT OR REPLACE INTO settings (key, value) VALUES ('end_of_day', ?1)",
-            params![&settings.end_of_day],
+            "INSERT OR REPLACE INTO settings (key, value) VALUES ('auto_stop_times', ?1)",
+            params![&times_str],
         )
         .map_err(|e| e.to_string())?;
     state
@@ -831,8 +871,8 @@ pub fn run() {
                                 tauri::WebviewUrl::App("preferences.html".into()),
                             )
                             .title("Preferences")
-                            .inner_size(400.0, 250.0)
-                            .resizable(false)
+                            .inner_size(420.0, 380.0)
+                            .resizable(true)
                             .build();
                         }
                         "tray_edit_entries" => {
@@ -934,8 +974,8 @@ pub fn run() {
                             tauri::WebviewUrl::App("preferences.html".into()),
                         )
                         .title("Preferences")
-                        .inner_size(400.0, 250.0)
-                        .resizable(false)
+                        .inner_size(420.0, 380.0)
+                        .resizable(true)
                         .build()
                         .expect("Failed to create preferences window");
                     }

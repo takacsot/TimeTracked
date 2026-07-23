@@ -138,6 +138,9 @@
     }
 
     .day-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
       font-size: 0.75em;
       color: #888;
       text-transform: uppercase;
@@ -145,6 +148,12 @@
       padding: 6px 0 2px;
       border-bottom: 1px solid #333;
       margin-bottom: 2px;
+    }
+
+    .day-header .day-total {
+      font-family: "SF Mono", "Menlo", monospace;
+      font-size: 1em;
+      color: #666;
     }
 
     .day-header:first-child {

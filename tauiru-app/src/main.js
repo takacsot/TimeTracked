@@ -83,21 +83,20 @@ async function renderRecentTasks() {
       grouped[item.date].push(item);
     }
 
-    const today = new Date().toISOString().split("T")[0];
-    const yesterday = new Date(Date.now() - 86400000).toISOString().split("T")[0];
-
     for (const date of Object.keys(grouped)) {
       // Day header
       const header = document.createElement("div");
       header.className = "day-header";
-      let label = date;
-      if (date === today) label = "Today";
-      else if (date === yesterday) label = "Yesterday";
-      else {
-        const d = new Date(date + "T00:00:00");
-        label = d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
-      }
-      header.textContent = label;
+      const d = new Date(date + "T00:00:00");
+      const label = d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+      const dayTotal = grouped[date].reduce((sum, t) => sum + t.seconds, 0);
+      const labelSpan = document.createElement("span");
+      labelSpan.textContent = label;
+      const totalSpan = document.createElement("span");
+      totalSpan.className = "day-total";
+      totalSpan.textContent = formatSeconds(dayTotal);
+      header.appendChild(labelSpan);
+      header.appendChild(totalSpan);
       recentList.appendChild(header);
 
       // Tasks for this day

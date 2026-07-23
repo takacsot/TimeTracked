@@ -94,6 +94,67 @@
       min-height: 16px;
     }
 
+    .field-group {
+      margin-bottom: 12px;
+    }
+
+    .field-group > label {
+      display: block;
+      color: #aaa;
+      margin-bottom: 8px;
+    }
+
+    .time-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+
+    .time-row input[type="time"] {
+      padding: 6px 10px;
+      border: 1px solid #333;
+      border-radius: 4px;
+      background: #16213e;
+      color: #eee;
+      font-size: 13px;
+      outline: none;
+    }
+
+    .time-row input[type="time"]:focus {
+      border-color: #0f3460;
+    }
+
+    .btn-remove {
+      background: none;
+      border: none;
+      color: #e94560;
+      font-size: 16px;
+      cursor: pointer;
+      padding: 2px 6px;
+      border-radius: 3px;
+    }
+
+    .btn-remove:hover {
+      background: rgba(233, 69, 96, 0.15);
+    }
+
+    .btn-add {
+      background: none;
+      border: 1px dashed #444;
+      color: #aaa;
+      font-size: 11px;
+      cursor: pointer;
+      padding: 4px 10px;
+      border-radius: 4px;
+      margin-top: 4px;
+    }
+
+    .btn-add:hover {
+      border-color: #666;
+      color: #eee;
+    }
+
     hr {
       border: none;
       border-top: 1px solid #333;
@@ -110,9 +171,10 @@
 <body>
   <div class="section">
     <h2>Working Hours</h2>
-    <div class="field">
-      <label>End of day (auto-stop time)</label>
-      <input type="time" id="end-of-day" value="17:00" />
+    <div class="field-group">
+      <label>Auto-stop times</label>
+      <div id="auto-stop-list"></div>
+      <button class="btn-add" id="add-time-btn">+ Add time</button>
     </div>
     <div class="field">
       <label>Font size (px)</label>
@@ -142,7 +204,8 @@
   <script type="module">
     const { invoke } = window.__TAURI__.core;
 
-    const endOfDayInput = document.getElementById("end-of-day");
+    const autoStopList = document.getElementById("auto-stop-list");
+    const addTimeBtn = document.getElementById("add-time-btn");
     const fontSizeInput = document.getElementById("font-size");
     const alwaysOnTopInput = document.getElementById("always-on-top");
     const saveBtn = document.getElementById("save-btn");
@@ -150,11 +213,31 @@
     const exportBtn = document.getElementById("export-btn");
     const exportStatus = document.getElementById("export-status");
 
+    function addTimeRow(value = "17:00") {
+      const row = document.createElement("div");
+      row.className = "time-row";
+      const input = document.createElement("input");
+      input.type = "time";
+      input.value = value;
+      const removeBtn = document.createElement("button");
+      removeBtn.className = "btn-remove";
+      removeBtn.textContent = "×";
+      removeBtn.addEventListener("click", () => row.remove());
+      row.appendChild(input);
+      row.appendChild(removeBtn);
+      autoStopList.appendChild(row);
+    }
+
+    addTimeBtn.addEventListener("click", () => addTimeRow());
+
     // Load current settings
     async function loadSettings() {
       try {
         const settings = await invoke("get_settings");
-        endOfDayInput.value = settings.end_of_day;
+        autoStopList.innerHTML = "";
+        for (const t of settings.auto_stop_times) {
+          addTimeRow(t);
+        }
         fontSizeInput.value = settings.font_size;
         alwaysOnTopInput.checked = settings.always_on_top;
       } catch (e) {
@@ -167,9 +250,12 @@
       try {
         const fontSize = parseInt(fontSizeInput.value, 10) || 12;
         const alwaysOnTop = alwaysOnTopInput.checked;
+        const times = [...autoStopList.querySelectorAll("input[type=time]")]
+          .map(i => i.value)
+          .filter(v => v);
         await invoke("save_settings", {
           settings: {
-            end_of_day: endOfDayInput.value,
+            auto_stop_times: times,
             font_size: fontSize,
             always_on_top: alwaysOnTop
           }
